@@ -1,0 +1,37 @@
+id: com.valvesoftware.Steam.Utility.MumbleOverlay
+default-branch: stable
+sdk: org.kde.Sdk//5.15-22.08
+sdk-extensions:
+  - org.freedesktop.Sdk.Compat.i386
+  - org.freedesktop.Sdk.Extension.toolchain-i386
+runtime: com.valvesoftware.Steam
+runtime-version: stable
+build-extension: true
+appstream-compose: false
+modules:
+  - name: mumble-overlay
+    buildsystem: cmake
+    build-options: &compat-i386-build-options
+      prepend-pkg-config-path: /app/lib32/pkgconfig:/usr/lib/i386-linux-gnu/pkgconfig
+      ldflags: -L/app/lib32/
+      prepend-path: /usr/lib/sdk/toolchain-i386/bin
+      env:
+        CC: i686-unknown-linux-gnu-gcc
+        CXX: i686-unknown-linux-gnu-g++
+    config-opts:
+      - -DCMAKE_INSTALL_PREFIX=${FLATPAK_DEST}
+      - -Dserver=OFF
+      - -Dclient=OFF
+      - -Doverlay=ON
+      - -Doverlay-xcompile=ON
+      - -DBUILD_OVERLAY_XCOMPILE=ON
+      - -Dplugins=OFF
+    post-install:
+      - install -Dm644 libmumbleoverlay.x86_64.so.1.5.0 ${FLATPAK_DEST}/lib/libmumbleoverlay.so.1.5.0
+      - ln -s ${FLATPAK_DEST}/lib/libmumbleoverlay.so.1.5.0 ${FLATPAK_DEST}/lib/libmumbleoverlay.so
+      - install -Dm644 libmumbleoverlay.x86.so.1.5.0 ${FLATPAK_DEST}/lib32/libmumbleoverlay.so.1.5.0
+      - ln -s ${FLATPAK_DEST}/lib32/libmumbleoverlay.so.1.5.0 ${FLATPAK_DEST}/lib32/libmumbleoverlay.so
+    sources:
+      - type: git
+        url: https://github.com/carlocastoldi/mumble
+        commit: "d904783ecdf37944a9df81518c9c303adf616ca8"
