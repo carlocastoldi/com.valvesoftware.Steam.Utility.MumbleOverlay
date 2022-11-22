@@ -8,30 +8,57 @@ runtime: com.valvesoftware.Steam
 runtime-version: stable
 build-extension: true
 appstream-compose: false
+build-options:
+  prefix: /app/utils/MumbleOverlay
+  prepend-path: /app/utils/MumbleOverlay/bin
+  prepend-pkg-config-path: /app/utils/MumbleOverlay/lib/pkgconfig
+x-arch-build-options:
+  x86_64: &x86_64-build-options
+    libdir: /app/utils/MumbleOverlay/lib/x86_64-linux-gnu
+    prepend-pkg-config-path: /app/utils/MumbleOverlay/lib/x86_64-linux-gnu/pkgconfig
+  i386: &i386-build-options
+    libdir: /app/utils/MumbleOverlay/lib/i386-linux-gnu
+    prepend-pkg-config-path: /app/utils/MumbleOverlay/lib/i386-linux-gnu/pkgconfig
+    append-path: /usr/lib/sdk/toolchain-i386/bin
+    env:
+      CC: i686-unknown-linux-gnu-gcc
+      CXX: i686-unknown-linux-gnu-g++
+cleanup:
+  - /include
+  - /lib/*.a
+  - /lib/*.la
+  - /lib/pkgconfig
+  - /lib/cmake
 modules:
   - name: mumble-overlay
-    buildsystem: cmake
-    build-options: &compat-i386-build-options
-      prepend-pkg-config-path: /app/lib32/pkgconfig:/usr/lib/i386-linux-gnu/pkgconfig
-      ldflags: -L/app/lib32/
-      prepend-path: /usr/lib/sdk/toolchain-i386/bin
-      env:
-        CC: i686-unknown-linux-gnu-gcc
-        CXX: i686-unknown-linux-gnu-g++
-    config-opts:
-      - -DCMAKE_INSTALL_PREFIX=${FLATPAK_DEST}
+    buildsystem: cmake-ninja
+    builddir: true
+    build-options:
+      arch:
+        x86_64: *x86_64-build-options
+    config-opts: &mumble-overlay-config-opts
       - -Dserver=OFF
       - -Dclient=OFF
       - -Doverlay=ON
-      - -Doverlay-xcompile=ON
-      - -DBUILD_OVERLAY_XCOMPILE=ON
+      - -Doverlay-xcompile=OFF
+      - -DBUILD_OVERLAY_XCOMPILE=OFF
       - -Dplugins=OFF
-    post-install:
-      - install -Dm644 libmumbleoverlay.x86_64.so.1.5.0 ${FLATPAK_DEST}/lib/libmumbleoverlay.so.1.5.0
-      - ln -s ${FLATPAK_DEST}/lib/libmumbleoverlay.so.1.5.0 ${FLATPAK_DEST}/lib/libmumbleoverlay.so
-      - install -Dm644 libmumbleoverlay.x86.so.1.5.0 ${FLATPAK_DEST}/lib32/libmumbleoverlay.so.1.5.0
-      - ln -s ${FLATPAK_DEST}/lib32/libmumbleoverlay.so.1.5.0 ${FLATPAK_DEST}/lib32/libmumbleoverlay.so
-    sources:
+    sources: &mumble-overlay-sources
       - type: git
-        url: https://github.com/carlocastoldi/mumble
-        commit: "d904783ecdf37944a9df81518c9c303adf616ca8"
+        url: https://github.com/mumble-voip/mumble.git
+        tag: v1.4.287
+        commit: 5d808e287e99b402b724e411a7a0848e00956a24
+      - type: patch
+        paths:
+          - patches/mumble/0001-BUILD-crypto-Migrate-to-OpenSSL-3.0-compatible-API.patch
+          - patches/mumble/0001-BUILD-overlay-build-overlay-on-Linux-and-FreeBSD-wit.patch
+          - patches/mumble/0001-CHANGE-ipc-move-Socket-and-OverlayPipe-to-XDG_RUNTIM.patch
+
+  - name: mumble-overlay-32bit
+    buildsystem: cmake-ninja
+    builddir: true
+    build-options:
+      arch:
+        x86_64: *i386-build-options
+    config-opts: *mumble-overlay-config-opts
+    sources: *mumble-overlay-sources
