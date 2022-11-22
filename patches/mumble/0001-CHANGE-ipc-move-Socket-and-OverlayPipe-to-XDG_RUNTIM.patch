@@ -1,0 +1,207 @@
+From b79a2c9f6a95280b4c1ba6c40e1f6e04bb4585a2 Mon Sep 17 00:00:00 2001
+From: Carlo Castoldi <carlo.castoldi@outlook.com>
+Date: Sun, 13 Nov 2022 22:36:02 +0100
+Subject: [PATCH] CHANGE(ipc): move Socket and OverlayPipe to
+ $XDG_RUNTIME_DIR/mumble/
+
+Moving MumbleSocket and MumbleOverlayPipe to a dedicated subdirectory keeps the runtime directory clean and allows flatpak applications to use the overlay by giving access only to Mumble's subdirectory.
+It also moves the default directory to /run/user/$UID/mumble/ when $XDG_RUNTIME_DIR is not set.
+
+Fixes #5951
+---
+ overlay_gl/CMakeLists.txt |  7 +++----
+ overlay_gl/overlay.c      | 30 +++++++++++++++++++++---------
+ src/mumble/Overlay.cpp    | 12 +++++++-----
+ src/mumble/SocketRPC.cpp  | 25 +++++++++++++++----------
+ src/tests/OverlayTest.cpp | 16 ++++++++++++++--
+ 5 files changed, 60 insertions(+), 30 deletions(-)
+
+diff --git a/overlay_gl/CMakeLists.txt b/overlay_gl/CMakeLists.txt
+index 4a0a2dc67..746d68e3d 100644
+--- a/overlay_gl/CMakeLists.txt
++++ b/overlay_gl/CMakeLists.txt
+@@ -31,10 +31,9 @@ if(NOT APPLE)
+ 			"-Wl,-z,lazy"
+ 	)
+ 
+-	set_target_properties(overlay_gl
+-		PROPERTIES
+-			COMPILE_DEFINITIONS
+-				"TARGET_UNIX"
++	target_compile_definitions(overlay_gl
++		PRIVATE
++			"TARGET_UNIX"
+ 	)
+ 
+ 	if(overlay-xcompile)
+diff --git a/overlay_gl/overlay.c b/overlay_gl/overlay.c
+index 54149268b..8ea1de7ac 100644
+--- a/overlay_gl/overlay.c
++++ b/overlay_gl/overlay.c
+@@ -147,6 +147,24 @@ static void newContext(Context *ctx) {
+ 	ctx->timeT             = clock();
+ 	ctx->frameCount        = 0;
+ 
++#ifdef __linux__
++	char *xdgRuntimeDir = getenv("XDG_RUNTIME_DIR");
++
++	if (xdgRuntimeDir != NULL) {
++		ctx->saName.sun_family = PF_UNIX;
++		strcpy(ctx->saName.sun_path, xdgRuntimeDir);
++		if(xdgRuntimeDir[(strlen(xdgRuntimeDir)-1)] != '/')
++			strcat(ctx->saName.sun_path, "/");
++		strcat(ctx->saName.sun_path, "mumble/MumbleOverlayPipe");
++	} else {
++		char uid[10];
++		sprintf(uid, "%d", getuid());
++		ctx->saName.sun_family = PF_UNIX;
++		strcpy(ctx->saName.sun_path, "/run/user/");
++		strcat(ctx->saName.sun_path, uid);
++		strcat(ctx->saName.sun_path, "/mumble/MumbleOverlayPipe");
++	}
++#else
+ 	char *home = getenv("HOME");
+ 	if (home == NULL) {
+ 		struct passwd *pwent = getpwuid(getuid());
+@@ -154,18 +172,12 @@ static void newContext(Context *ctx) {
+ 			home = pwent->pw_dir;
+ 		}
+ 	}
+-
+-	char *xdgRuntimeDir = getenv("XDG_RUNTIME_DIR");
+-
+-	if (xdgRuntimeDir != NULL) {
+-		ctx->saName.sun_family = PF_UNIX;
+-		strcpy(ctx->saName.sun_path, xdgRuntimeDir);
+-		strcat(ctx->saName.sun_path, "/MumbleOverlayPipe");
+-	} else if (home) {
++	if (home) {
+ 		ctx->saName.sun_family = PF_UNIX;
+ 		strcpy(ctx->saName.sun_path, home);
+-		strcat(ctx->saName.sun_path, "/.MumbleOverlayPipe");
++		strcat(ctx->saName.sun_path, "/MumbleOverlayPipe");
+ 	}
++#endif
+ 
+ 	ods("OpenGL Version %s, Vendor %s, Renderer %s, Shader %s", glGetString(GL_VERSION), glGetString(GL_VENDOR),
+ 		glGetString(GL_RENDERER), glGetString(GL_SHADING_LANGUAGE_VERSION));
+diff --git a/src/mumble/Overlay.cpp b/src/mumble/Overlay.cpp
+index 107867525..ed8c5f5d0 100644
+--- a/src/mumble/Overlay.cpp
++++ b/src/mumble/Overlay.cpp
+@@ -244,13 +244,15 @@ void Overlay::createPipe() {
+ #else
+ 	{
+ 		QString xdgRuntimePath = QProcessEnvironment::systemEnvironment().value(QLatin1String("XDG_RUNTIME_DIR"));
+-		QDir xdgRuntimeDir     = QDir(xdgRuntimePath);
+-
+-		if (!xdgRuntimePath.isNull() && xdgRuntimeDir.exists()) {
+-			pipepath = xdgRuntimeDir.absoluteFilePath(QLatin1String("MumbleOverlayPipe"));
++		QString mumbleRuntimePath;
++		if (!xdgRuntimePath.isNull()) {
++		    mumbleRuntimePath = QDir(xdgRuntimePath).absolutePath() + QLatin1String("/mumble/");
+ 		} else {
+-			pipepath = QDir::home().absoluteFilePath(QLatin1String(".MumbleOverlayPipe"));
++			mumbleRuntimePath = QLatin1String("/run/user/") + QString::number(getuid()) + QLatin1String("/mumble/");
+ 		}
++		QDir mumbleRuntimeDir = QDir(mumbleRuntimePath);
++		mumbleRuntimeDir.mkpath(".");
++		pipepath = mumbleRuntimeDir.absoluteFilePath(QLatin1String("MumbleOverlayPipe"));
+ 	}
+ 
+ 	{
+diff --git a/src/mumble/SocketRPC.cpp b/src/mumble/SocketRPC.cpp
+index 0aabc8b15..bf1bcb6c6 100644
+--- a/src/mumble/SocketRPC.cpp
++++ b/src/mumble/SocketRPC.cpp
+@@ -236,13 +236,15 @@ SocketRPC::SocketRPC(const QString &basename, QObject *p) : QObject(p) {
+ #else
+ 	{
+ 		QString xdgRuntimePath = QProcessEnvironment::systemEnvironment().value(QLatin1String("XDG_RUNTIME_DIR"));
+-		QDir xdgRuntimeDir     = QDir(xdgRuntimePath);
+-
+-		if (!xdgRuntimePath.isNull() && xdgRuntimeDir.exists()) {
+-			pipepath = xdgRuntimeDir.absoluteFilePath(basename + QLatin1String("Socket"));
++		QString mumbleRuntimePath;
++		if (!xdgRuntimePath.isNull()) {
++		    mumbleRuntimePath = QDir(xdgRuntimePath).absolutePath() + QLatin1String("/mumble/");
+ 		} else {
+-			pipepath = QDir::home().absoluteFilePath(QLatin1String(".") + basename + QLatin1String("Socket"));
++			mumbleRuntimePath = QLatin1String("/run/user/") + QString::number(getuid()) + QLatin1String("/mumble/");
+ 		}
++		QDir mumbleRuntimeDir = QDir(mumbleRuntimePath);
++		mumbleRuntimeDir.mkpath(".");
++		pipepath = mumbleRuntimeDir.absoluteFilePath(basename + QLatin1String("Socket"));
+ 	}
+ 
+ 	{
+@@ -280,13 +282,15 @@ bool SocketRPC::send(const QString &basename, const QString &request, const QMap
+ #else
+ 	{
+ 		QString xdgRuntimePath = QProcessEnvironment::systemEnvironment().value(QLatin1String("XDG_RUNTIME_DIR"));
+-		QDir xdgRuntimeDir     = QDir(xdgRuntimePath);
+-
+-		if (!xdgRuntimePath.isNull() && xdgRuntimeDir.exists()) {
+-			pipepath = xdgRuntimeDir.absoluteFilePath(basename + QLatin1String("Socket"));
++		QString mumbleRuntimePath;
++		if (!xdgRuntimePath.isNull()) {
++		    mumbleRuntimePath = QDir(xdgRuntimePath).absolutePath() + QLatin1String("/mumble/");
+ 		} else {
+-			pipepath = QDir::home().absoluteFilePath(QLatin1String(".") + basename + QLatin1String("Socket"));
++			mumbleRuntimePath = QLatin1String("/run/user/") + QString::number(getuid()) + QLatin1String("/mumble/");
+ 		}
++		QDir mumbleRuntimeDir = QDir(mumbleRuntimePath);
++		mumbleRuntimeDir.mkpath(".");
++		pipepath = mumbleRuntimeDir.absoluteFilePath(basename + QLatin1String("Socket"));
+ 	}
+ #endif
+ 
+@@ -325,3 +329,4 @@ bool SocketRPC::send(const QString &basename, const QString &request, const QMap
+ 
+ 	return QVariant(succ.text()).toBool();
+ }
++
+diff --git a/src/tests/OverlayTest.cpp b/src/tests/OverlayTest.cpp
+index a565d54e9..8d8e8e4a7 100644
+--- a/src/tests/OverlayTest.cpp
++++ b/src/tests/OverlayTest.cpp
+@@ -16,6 +16,7 @@
+ #	include "win.h"
+ #endif
+ 
++#include <unistd.h>
+ #include <QtCore>
+ #include <QtGui>
+ #include <QtNetwork>
+@@ -96,7 +97,18 @@ void OverlayWidget::paintEvent(QPaintEvent *) {
+ #ifdef Q_OS_WIN
+ 		qlsSocket->connectToServer(QLatin1String("MumbleOverlayPipe"));
+ #else
+-		qlsSocket->connectToServer(QDir::home().absoluteFilePath(QLatin1String(".MumbleOverlayPipe")));
++		QString xdgRuntimePath = QProcessEnvironment::systemEnvironment().value(QLatin1String("XDG_RUNTIME_DIR"));
++		QString mumbleRuntimePath;
++		if (!xdgRuntimePath.isNull()) {
++		    mumbleRuntimePath = QDir(xdgRuntimePath).absolutePath() + QLatin1String("/mumble/");
++		} else {
++			mumbleRuntimePath = QLatin1String("/run/user/") + QString::number(getuid()) + QLatin1String("/mumble/");
++		}
++		QDir mumbleRuntimeDir = QDir(mumbleRuntimePath);
++		mumbleRuntimeDir.mkpath(".");
++		QString pipepath = mumbleRuntimeDir.absoluteFilePath(QLatin1String("MumbleOverlayPipe"));
++		qWarning() << "connectToServer(" << pipepath << ")";
++		qlsSocket->connectToServer(pipepath);
+ #endif
+ 	}
+ 
+@@ -166,7 +178,7 @@ void OverlayWidget::disconnected() {
+ }
+ 
+ void OverlayWidget::error(QLocalSocket::LocalSocketError) {
+-	qWarning() << "error";
++	perror("error");
+ 	disconnected();
+ }
+ 
+-- 
+2.38.1
+
