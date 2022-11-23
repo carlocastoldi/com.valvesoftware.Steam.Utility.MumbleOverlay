@@ -1,0 +1,13 @@
+diff --git a/cmake/install-paths.cmake b/cmake/install-paths.cmake
+index 11162c91b..47d507a15 100644
+--- a/cmake/install-paths.cmake
++++ b/cmake/install-paths.cmake
+@@ -32,7 +32,7 @@ if(UNIX)
+ 		set(SYSCONFDIR_DEFAULT "${CMAKE_INSTALL_SYSCONFDIR}/mumble")
+ 	else()
+ 		set(EXECUTABLEDIR_DEFAULT "bin")
+-		set(LIBDIR_DEFAULT "${CMAKE_INSTALL_LIBDIR}/mumble")
++		set(LIBDIR_DEFAULT "${CMAKE_INSTALL_LIBDIR}")
+ 		set(PLUGINDIR_DEFAULT "${CMAKE_INSTALL_LIBDIR}/mumble/plugins")
+ 		set(SCRIPTDIR_DEFAULT "${CMAKE_INSTALL_BINDIR}")
+ 		set(MANDIR_DEFAULT "${CMAKE_INSTALL_MANDIR}/man1")

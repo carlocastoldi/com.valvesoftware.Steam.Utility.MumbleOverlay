@@ -54,6 +54,7 @@ modules:
           - patches/mumble/0001-BUILD-overlay-build-overlay-on-Linux-and-FreeBSD-wit.patch
           - patches/mumble/0001-CHANGE-ipc-move-Socket-and-OverlayPipe-to-XDG_RUNTIM.patch
           - patches/mumble/0001-FIX-overlay-Implement-library-search-list-for-dlsym-.patch
+          - patches/mumble/move-mumble-install-libdir.patch
 
   - name: mumble-overlay-32bit
     buildsystem: cmake-ninja
