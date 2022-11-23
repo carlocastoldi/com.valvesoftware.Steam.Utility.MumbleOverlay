@@ -53,6 +53,7 @@ modules:
           - patches/mumble/0001-BUILD-crypto-Migrate-to-OpenSSL-3.0-compatible-API.patch
           - patches/mumble/0001-BUILD-overlay-build-overlay-on-Linux-and-FreeBSD-wit.patch
           - patches/mumble/0001-CHANGE-ipc-move-Socket-and-OverlayPipe-to-XDG_RUNTIM.patch
+          - patches/mumble/0001-FIX-overlay-Implement-library-search-list-for-dlsym-.patch
 
   - name: mumble-overlay-32bit
     buildsystem: cmake-ninja
