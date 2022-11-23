@@ -1,9 +1,10 @@
 # com.valvesoftware.Steam.Utility.MumbleOverlay
-installs `libmumbleoverlay.so` in `/app/utils/MumbleOverlay/lib32/` (for 32bit games) and `/app/utils/MumbleOverlay/lib/` (for 64bit games).
+Installs `libmumbleoverlay.so` in `/app/utils/MumbleOverlay/lib/i386-linux-gnu/` (for 32bit games) and `/app/utils/MumbleOverlay/lib/x86_64-linux-gnu/` (for 64bit games).
 
-A game, in order to display the overlay, needs to be launched with the library preloaded. For example, launch options could be something like: `LD_PRELOAD=/app/utils/MumbleOverlay/lib32/libmumbleoverlay.so  %command%`.
+## Usage
+A game, in order to display the overlay, needs to be launched with the library preloaded. The game's launch options should thus be set to: `LD_PRELOAD=/app/utils/MumbleOverlay/\$LIB/mumble/libmumbleoverlay.so %command%`.
 
-Some steam games are not linked against OpenGL library. In that case you may need to copy `libGL.so` in flatpak'ed Steam directory and `LD_PRELOAD` it as well: e.g. `LD_PRELOAD=/app/utils/MumbleOverlay/lib32/libmumbleoverlay.so:/home/carlo/data/Steam/linux32/mumble/libGL.so  %command%`. An extension may be developed in the future.
+`LD_PRELOAD=/app/utils/MumbleOverlay/\$LIB/libmumbleoverlay.so:/usr/\$LIB/libGL.so.1 %command%` if the game is not linked against OpenGL library.
 
 ## Related pull requests
 This extension is not officially published, yet. The following PRs still need to be discussed & merged:
